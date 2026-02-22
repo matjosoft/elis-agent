@@ -1,0 +1,25 @@
+[project]
+name = "elis-agent"
+version = "0.1.0"
+description = "Autonomous energy analyst agent for Raspberry Pi"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "langgraph>=0.3",
+    "langgraph-checkpoint-sqlite>=3.0",
+    "langchain-mcp-adapters>=0.2",
+    "langchain-openai>=0.3",
+    "langchain>=0.3",
+    "python-dotenv>=1.0",
+    "python-dateutil>=2.8",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project.scripts]
+elis-agent = "src.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]

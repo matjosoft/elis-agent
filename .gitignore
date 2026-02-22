@@ -1,0 +1,12 @@
+.env
+*.db
+data/
+reports/
+agent.log
+cron.log
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+dist/
+*.egg-info/
