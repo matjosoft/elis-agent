@@ -125,6 +125,18 @@ def get_latest_consumption_timestamp(conn: sqlite3.Connection) -> Optional[str]:
     return row["latest"] if row else None
 
 
+def get_today_hourly(conn: sqlite3.Connection, run_date: str) -> list[dict]:
+    """Return hourly rows for *run_date* (YYYY-MM-DD), ordered by timestamp."""
+    rows = conn.execute(
+        "SELECT timestamp, consumption_kwh, cost, unit_price"
+        " FROM consumption_history"
+        " WHERE timestamp >= ? AND timestamp < date(?, '+1 day')"
+        " ORDER BY timestamp",
+        (run_date, run_date),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def get_consumption_count(conn: sqlite3.Connection) -> int:
     row = conn.execute(
         "SELECT COUNT(*) AS cnt FROM consumption_history"

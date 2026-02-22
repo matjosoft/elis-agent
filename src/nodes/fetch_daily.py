@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
@@ -8,6 +8,7 @@ from src.db import (
     get_baseline_metrics,
     get_connection,
     get_latest_consumption_timestamp,
+    get_today_hourly,
     insert_consumption_batch,
 )
 from src.parsers import parse_historic_json
@@ -81,10 +82,17 @@ async def fetch_daily_node(state: AgentState) -> dict:
             baseline.get("overall_avg_kwh") or 0,
         )
 
+        # ----------------------------------------------------------------
+        # 4. Today's hourly rows (for the report table)
+        # ----------------------------------------------------------------
+        run_date = state.get("run_date", date.today().isoformat())
+        today_hourly = get_today_hourly(conn, run_date)
+
         return {
             "current_prices": price_text,
             "recent_consumption": consumption_text,
             "baseline_metrics": baseline,
+            "today_hourly": today_hourly,
         }
 
     except Exception as exc:

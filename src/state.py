@@ -17,6 +17,7 @@ class AgentState(TypedDict, total=False):
     current_prices: str        # raw text from get-price-forecast
     recent_consumption: str    # raw JSON string from get-historic-json
     baseline_metrics: dict     # pre-aggregated SQL stats
+    today_hourly: list         # hourly rows for today (from DB)
 
     # Analysis output
     analysis_json: str
