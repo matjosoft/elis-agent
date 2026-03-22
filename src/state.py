@@ -18,6 +18,8 @@ class AgentState(TypedDict, total=False):
     recent_consumption: str    # raw JSON string from get-historic-json
     baseline_metrics: dict     # pre-aggregated SQL stats
     today_hourly: list         # hourly rows for today (from DB)
+    monthly_daily: list        # daily aggregates for the current month (from DB)
+    monthly_daily_production: list  # daily production aggregates for the current month (from DB)
 
     # Analysis output
     analysis_json: str

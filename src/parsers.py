@@ -43,6 +43,46 @@ def parse_historic_json(result) -> list[dict]:
     return records
 
 
+def parse_production_json(result) -> list[dict]:
+    """
+    Parse the output from get-historic-json with production=True.
+
+    Expected input (list of pytibber nodes):
+        [
+          {"from": "2024-01-01T00:00:00+01:00", "to": "...",
+           "production": 0.75, "profit": 0.31,
+           "unitPrice": 0.41, "unitPriceVAT": 0.10},
+          ...
+        ]
+
+    Returns a list of dicts ready for insert_production_batch().
+    """
+    if isinstance(result, str):
+        data = _extract_json_value(result)
+    else:
+        data = result
+
+    if not isinstance(data, list):
+        return []
+
+    records = []
+    for entry in data:
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("production") is None:
+            continue
+        records.append(
+            {
+                "timestamp": entry["from"],
+                "production_kwh": entry.get("production"),
+                "profit": entry.get("profit"),
+                "unit_price": entry.get("unitPrice"),
+                "unit_price_vat": entry.get("unitPriceVAT"),
+            }
+        )
+    return records
+
+
 def parse_home_id(text: str) -> str:
     """
     Extract the first home ID from the list-homes text response.
