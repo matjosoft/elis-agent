@@ -11,3 +11,6 @@ __pycache__/
 .venv/
 dist/
 *.egg-info/
+SETUP.md
+setup-autorun.sh
+nginx-elis.conf

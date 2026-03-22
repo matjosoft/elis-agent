@@ -7,6 +7,7 @@ from langgraph.graph import END, START, StateGraph
 
 from src.config import DB_PATH
 from src.nodes.analysis import analysis_node
+from src.nodes.dashboard import dashboard_node
 from src.nodes.fetch_daily import fetch_daily_node
 from src.nodes.initialization import initialization_node
 from src.nodes.reporting import reporting_node
@@ -55,6 +56,7 @@ def build_graph() -> StateGraph:
     builder.add_node("fetch_daily", fetch_daily_node)
     builder.add_node("analysis", analysis_node)
     builder.add_node("reporting", reporting_node)
+    builder.add_node("dashboard", dashboard_node)
     builder.add_node("storage", storage_node)
 
     builder.add_edge(START, "initialization")
@@ -81,9 +83,10 @@ def build_graph() -> StateGraph:
         },
     )
 
-    # reporting runs first so summary_markdown is in state when storage saves it
+    # reporting → dashboard → storage so all outputs are ready before storage saves
     builder.add_edge("analysis", "reporting")
-    builder.add_edge("reporting", "storage")
+    builder.add_edge("reporting", "dashboard")
+    builder.add_edge("dashboard", "storage")
     builder.add_edge("storage", END)
 
     return builder

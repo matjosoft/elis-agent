@@ -8,10 +8,14 @@ from src.db import (
     get_baseline_metrics,
     get_connection,
     get_latest_consumption_timestamp,
+    get_latest_production_timestamp,
+    get_monthly_daily_rows,
+    get_monthly_production_rows,
     get_today_hourly,
     insert_consumption_batch,
+    insert_production_batch,
 )
-from src.parsers import parse_historic_json
+from src.parsers import parse_historic_json, parse_production_json
 from src.state import AgentState
 
 logger = logging.getLogger(__name__)
@@ -49,7 +53,7 @@ async def fetch_daily_node(state: AgentState) -> dict:
         # 1. Delta consumption
         # ----------------------------------------------------------------
         latest_ts = get_latest_consumption_timestamp(conn)
-        hours_to_fetch = min(_hours_since(latest_ts) + 1, _MAX_DELTA_HOURS)
+        hours_to_fetch = _MAX_DELTA_HOURS if latest_ts is None else min(_hours_since(latest_ts) + 1, _MAX_DELTA_HOURS)
 
         logger.info("Fetching %d hours of delta consumption", hours_to_fetch)
         consumption_result = await get_historic_json.ainvoke(
@@ -83,16 +87,44 @@ async def fetch_daily_node(state: AgentState) -> dict:
         )
 
         # ----------------------------------------------------------------
-        # 4. Today's hourly rows (for the report table)
+        # 5. Delta production
         # ----------------------------------------------------------------
+        latest_prod_ts = get_latest_production_timestamp(conn)
+        # If no production data at all, fetch the full cap to backfill the month
+        prod_hours = _MAX_DELTA_HOURS if latest_prod_ts is None else min(_hours_since(latest_prod_ts) + 1, _MAX_DELTA_HOURS)
+
+        logger.info("Fetching %d hours of delta production", prod_hours)
+        try:
+            production_result = await get_historic_json.ainvoke(
+                {
+                    "home_id": home_id,
+                    "resolution": "HOURLY",
+                    "count": prod_hours,
+                    "production": True,
+                }
+            )
+            production_text = _to_text(production_result)
+            production_records = parse_production_json(production_text)
+            if production_records:
+                inserted_prod = insert_production_batch(conn, production_records)
+                logger.info("Delta production: inserted %d new records", inserted_prod)
+        except Exception as prod_exc:
+            # Production may not be available for all homes — log but don't fail
+            logger.warning("Production fetch skipped: %s", prod_exc)
+
         run_date = state.get("run_date", date.today().isoformat())
         today_hourly = get_today_hourly(conn, run_date)
+        year_month = run_date[:7]  # YYYY-MM
+        monthly_daily = get_monthly_daily_rows(conn, year_month)
+        monthly_daily_production = get_monthly_production_rows(conn, year_month)
 
         return {
             "current_prices": price_text,
             "recent_consumption": consumption_text,
             "baseline_metrics": baseline,
             "today_hourly": today_hourly,
+            "monthly_daily": monthly_daily,
+            "monthly_daily_production": monthly_daily_production,
         }
 
     except Exception as exc:
@@ -102,19 +134,16 @@ async def fetch_daily_node(state: AgentState) -> dict:
         conn.close()
 
 
-def _hours_since(iso_timestamp: str | None) -> int:
-    """Hours between an ISO timestamp and now, minimum 48."""
-    if not iso_timestamp:
-        return 48
+def _hours_since(iso_timestamp: str) -> int:
+    """Hours between an ISO timestamp and now, minimum 1."""
     try:
         then = datetime.fromisoformat(iso_timestamp)
         if then.tzinfo is None:
             then = then.replace(tzinfo=timezone.utc)
         now = datetime.now(timezone.utc)
-        delta_hours = int((now - then).total_seconds() / 3600)
-        return max(delta_hours, 1)
+        return max(int((now - then).total_seconds() / 3600), 1)
     except ValueError:
-        return 48
+        return _MAX_DELTA_HOURS
 
 
 def _to_text(result) -> str:

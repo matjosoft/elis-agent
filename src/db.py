@@ -42,6 +42,17 @@ CREATE TABLE IF NOT EXISTS daily_prices (
     level TEXT,
     PRIMARY KEY (timestamp)
 );
+
+CREATE TABLE IF NOT EXISTS production_history (
+    timestamp TEXT NOT NULL,
+    production_kwh REAL,
+    profit REAL,
+    unit_price REAL,
+    unit_price_vat REAL,
+    PRIMARY KEY (timestamp)
+);
+CREATE INDEX IF NOT EXISTS idx_production_timestamp
+    ON production_history(timestamp);
 """
 
 
@@ -256,6 +267,78 @@ def insert_analysis(
         (run_date, analysis_json, summary_markdown),
     )
     conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# Production data
+# ---------------------------------------------------------------------------
+
+
+def insert_production_batch(conn: sqlite3.Connection, records: list[dict]) -> int:
+    """Insert production records, skipping duplicates. Returns number of rows inserted."""
+    inserted = 0
+    for rec in records:
+        cursor = conn.execute(
+            "INSERT OR IGNORE INTO production_history"
+            " (timestamp, production_kwh, profit, unit_price, unit_price_vat)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (
+                rec["timestamp"],
+                rec.get("production_kwh"),
+                rec.get("profit"),
+                rec.get("unit_price"),
+                rec.get("unit_price_vat"),
+            ),
+        )
+        inserted += cursor.rowcount
+    conn.commit()
+    return inserted
+
+
+def get_latest_production_timestamp(conn: sqlite3.Connection) -> Optional[str]:
+    row = conn.execute(
+        "SELECT MAX(timestamp) AS latest FROM production_history"
+    ).fetchone()
+    return row["latest"] if row else None
+
+
+def get_monthly_production_rows(conn: sqlite3.Connection, year_month: str) -> list[dict]:
+    """Return one row per calendar day for production in the given month (YYYY-MM)."""
+    rows = conn.execute(
+        "SELECT"
+        "  strftime('%Y-%m-%d', timestamp)  AS day,"
+        "  SUM(production_kwh)             AS total_kwh,"
+        "  SUM(profit)                     AS total_profit,"
+        "  AVG(unit_price)                 AS avg_price,"
+        "  COUNT(*)                        AS hours"
+        " FROM production_history"
+        " WHERE strftime('%Y-%m', timestamp) = ?"
+        " GROUP BY day"
+        " ORDER BY day",
+        (year_month,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_monthly_daily_rows(conn: sqlite3.Connection, year_month: str) -> list[dict]:
+    """
+    Return one row per calendar day for the given month (YYYY-MM).
+    Aggregates hourly consumption_history into daily totals/averages.
+    """
+    rows = conn.execute(
+        "SELECT"
+        "  strftime('%Y-%m-%d', timestamp)  AS day,"
+        "  SUM(consumption_kwh)             AS total_kwh,"
+        "  SUM(cost)                        AS total_cost,"
+        "  AVG(unit_price)                  AS avg_price,"
+        "  COUNT(*)                         AS hours"
+        " FROM consumption_history"
+        " WHERE strftime('%Y-%m', timestamp) = ?"
+        " GROUP BY day"
+        " ORDER BY day",
+        (year_month,),
+    ).fetchall()
+    return [dict(r) for r in rows]
 
 
 def get_latest_analysis(conn: sqlite3.Connection) -> Optional[dict]:
